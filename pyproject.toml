@@ -1,0 +1,10 @@
+[project]
+name = "bitwarden_vault_backup"
+version = "0.1.0"
+
+[project.scripts]
+bitwarden_vault_backup = "bitwarden_vault_backup.main:main"
+
+[build-system]
+requires = ["setuptools"]
+build-backend = "setuptools.build_meta"
