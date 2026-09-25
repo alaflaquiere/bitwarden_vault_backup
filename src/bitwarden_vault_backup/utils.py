@@ -136,8 +136,13 @@ def collect_user_inputs() -> tuple[bool, LoginConfig]:
 def cache_inputs(conf: LoginConfig) -> None:
     CACHE_DIR.mkdir(parents=True, exist_ok=True)
     try:
+        os.chmod(CACHE_DIR, 0o700)
+    except OSError:
+        pass
+    try:
         with open(CACHE_FILE, "w", encoding="utf-8") as f:
             json.dump({"user_email": conf.user_email, "save_folder": str(conf.save_folder)}, f)
+        os.chmod(CACHE_FILE, 0o600)
     except (AttributeError, TypeError, PermissionError, FileNotFoundError, OSError):
         print_warning("(Error while trying to save config to cache.)")
 
@@ -163,7 +168,7 @@ def get_session_key(conf: LoginConfig) -> bool:
 
     # Extract the session key
     match = re.search(r'export BW_SESSION="([^"]+)"', r.stdout)
-    if match == None:
+    if match is None:
         print_failed("Error while logging: Could not obtain a session key.")
         return False
     conf.session_key = match.group(1)
