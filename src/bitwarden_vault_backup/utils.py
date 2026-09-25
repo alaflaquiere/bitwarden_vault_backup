@@ -24,19 +24,27 @@ class LoginConfig:
     session_key: str = ""
 
 
-def sub_run(command: str):
+def sub_run(command: list[str], env: None | dict = None, input: None | str = None):
     return subprocess.run(
-        command.split(" "), capture_output=True, text=True, shell=False, encoding="utf-8", errors="replace", check=False
+        command,
+        capture_output=True,
+        text=True,
+        shell=False,
+        encoding="utf-8",
+        errors="replace",
+        check=False,
+        env=env,
+        input=input,
     )
 
 
 def check_installs() -> bool:
     print_step("Checking bw-cli and 7z installations")
-    r = sub_run("bw --version")
+    r = sub_run(["bw", "--version"])
     if r.returncode != 0:
         print_failed(r.stderr)
         return False
-    r = sub_run("7z -h")
+    r = sub_run(["7z", "-h"])
     if r.returncode != 0:
         print_failed(r.stderr)
         return False
@@ -46,7 +54,7 @@ def check_installs() -> bool:
 
 def check_for_update() -> bool:
     print_step("Checking for update")
-    r = sub_run("bw update")
+    r = sub_run(["bw", "update"])
     if r.returncode != 0:
         print_failed(r.stderr)
         return False
@@ -137,13 +145,17 @@ def get_session_key(conf: LoginConfig) -> bool:
     print_step("Logging in new session")
 
     # Make sure any previous session is closed
-    r = sub_run("bw logout")
+    r = sub_run(["bw", "logout"])
     if r.returncode != 0 and r.stderr != "You are not logged in.":
         print_failed(f"Error while logging out of previous session: {r.stderr}")
         return False
 
+    # Save the password to an environment variable to avoid exposing it in the command line
+    env = os.environ.copy()
+    env["BW_PASSWORD"] = conf.pwd
+
     # Log in
-    r = sub_run(f"bw login {conf.user_email} {conf.pwd} --method 0")
+    r = sub_run(["bw", "login", conf.user_email, "--passwordenv", "BW_PASSWORD", "--method", "0"], env=env)
     if r.returncode != 0:
         print_failed(f"Error while logging: {r.stderr}")
         return False
@@ -160,7 +172,7 @@ def get_session_key(conf: LoginConfig) -> bool:
 
 def sync_vault() -> bool:
     print_step("Synchronizing the vault")
-    r = sub_run("bw sync")
+    r = sub_run(["bw", "sync"])
     if r.returncode != 0:
         print_failed(r.stderr)
         return False
@@ -190,7 +202,7 @@ def export_vault_data(conf: LoginConfig) -> bool:
     encrypted_zip_path = conf.save_folder / ENCRYPTED_NAME
 
     clean_up(zip_path)
-    r = sub_run(f"bw export --output {zip_path} --format zip --session {conf.session_key}")
+    r = sub_run(["bw", "export", "--output", str(zip_path), "--format", "zip", "--session", conf.session_key])
     if r.returncode != 0:
         print_failed(f"Failed to export the data: {r.stderr}")
         clean_up(zip_path)
@@ -198,7 +210,7 @@ def export_vault_data(conf: LoginConfig) -> bool:
 
     # Extract the data from the zip file
     clean_up(temp_folder)
-    r = sub_run(f"7z x {zip_path} -o{temp_folder}")
+    r = sub_run(["7z", "x", str(zip_path), f"-o{temp_folder}"])
     if r.returncode != 0:
         print_failed(f"Failed to process the vault data: {r.stderr}")
         clean_up(zip_path)
@@ -207,7 +219,10 @@ def export_vault_data(conf: LoginConfig) -> bool:
 
     # Create an encrypted zip file
     clean_up(encrypted_zip_path)
-    r = sub_run(f"7z a -t7z -mx=9 -mhe=on -y -p{conf.pwd} {encrypted_zip_path} {temp_folder}/*")
+    r = sub_run(
+        ["7z", "a", "-t7z", "-mx=9", "-mhe=on", "-y", "-p", str(encrypted_zip_path), f"{temp_folder}/*"],
+        input=conf.pwd + "\n",
+    )
     if r.returncode != 0:
         print_failed(f"Failed to build encrypted archive: {r.stderr}")
         clean_up(zip_path)
@@ -222,11 +237,11 @@ def export_vault_data(conf: LoginConfig) -> bool:
 
 def close_session() -> bool:
     print_step("Closing session")
-    r = sub_run("bw lock")
+    r = sub_run(["bw", "lock"])
     if r.returncode != 0:
         print_failed(r.stderr)
         return False
-    r = sub_run("bw logout")
+    r = sub_run(["bw", "logout"])
     if r.returncode != 0:
         print_failed(r.stderr)
         return False
