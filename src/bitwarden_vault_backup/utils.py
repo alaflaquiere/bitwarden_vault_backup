@@ -129,6 +129,9 @@ def collect_user_inputs() -> tuple[bool, LoginConfig]:
 
     # Get master password
     pwd = getpass.getpass("    Enter your master password: ")
+    if not pwd:
+        print(red("     Master password cannot be empty."))
+        return False, LoginConfig()
 
     return True, LoginConfig(user_email=user_email, pwd=pwd, save_folder=Path(save_folder_raw))
 
