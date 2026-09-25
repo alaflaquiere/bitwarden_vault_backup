@@ -4,6 +4,7 @@ import os
 import re
 import shutil
 import subprocess
+import tempfile
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -180,18 +181,40 @@ def sync_vault() -> bool:
     return True
 
 
+def make_temp_folder() -> Path:
+    # mkdtemp creates the dir with 0700 permissions by default on POSIX
+    return Path(tempfile.mkdtemp(prefix="bw_vault_"))
+
+
+def secure_delete_file(path: Path) -> None:
+    "Overwrite file with random bits and delete (unlink)."
+    try:
+        length = path.stat().st_size
+        with open(path, "r+b") as f:
+            f.seek(0)
+            f.write(os.urandom(length))
+            f.flush()
+            os.fsync(f.fileno())
+    except OSError as e:
+        raise OSError(e)
+    finally:
+        path.unlink(missing_ok=True)
+
+
 def clean_up(p: Path) -> None:
-    if p.exists():
-        try:
-            if p.is_file():
-                p.unlink()
-            elif p.is_dir():
-                shutil.rmtree(p)
-            else:
-                raise ValueError("Error in type of path.")
-        except (FileNotFoundError, OSError, PermissionError):
-            print(red(f" /!\\ UNABLE TO DELETE '{p}'; MAKE SURE TO MANUALLY DELETE IT"))
-            input(" Press Enter to continue.")
+    if not p.exists():
+        return
+    try:
+        if p.is_file():
+            secure_delete_file(p)
+        elif p.is_dir():
+            for f in p.rglob("*"):
+                if f.is_file():
+                    secure_delete_file(f)
+            shutil.rmtree(p, ignore_errors=True)
+    except (OSError, PermissionError):
+        print(red(f" /!\\ UNABLE TO DELETE '{p}'; MAKE SURE TO MANUALLY DELETE IT"))
+        input(" Press Enter to continue.")
 
 
 def export_vault_data(conf: LoginConfig) -> bool:
